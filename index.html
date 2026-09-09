@@ -161,6 +161,9 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
   html{scroll-behavior:auto}
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
 }
+
+.booking-choice-modal{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px}.booking-choice-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.62)}.booking-choice-card{position:relative;z-index:1;width:min(520px,100%);background:#fff;color:#111;border-radius:18px;padding:30px;box-shadow:0 24px 70px rgba(0,0,0,.3)}.booking-choice-close{position:absolute;right:14px;top:10px;border:0;background:none;font-size:30px;line-height:1;cursor:pointer;color:#555}.booking-choice-card h3{margin:8px 35px 10px 0}.booking-choice-card p{margin:0 0 22px;color:#666;line-height:1.5}.booking-choice-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.booking-choice{display:flex;align-items:center;justify-content:center;min-height:52px;padding:12px 14px;border-radius:10px;text-decoration:none;font-weight:800;border:1px solid #ddd}.booking-choice.whatsapp{background:#eef9f1;color:#16733a}.booking-choice.messenger{background:#eef4ff;color:#1769c2}.booking-choice.sms{background:#f5f5f5;color:#222}.booking-choice.email{background:#faf7ee;color:#7b5a16}@media(max-width:560px){.booking-choice-card{padding:26px 20px}.booking-choice-grid{grid-template-columns:1fr}}
+.booking-choice-modal{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px}.booking-choice-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.62)}.booking-choice-card{position:relative;z-index:1;width:min(520px,100%);background:#fff;color:#111;border-radius:18px;padding:30px;box-shadow:0 24px 70px rgba(0,0,0,.3)}.booking-choice-close{position:absolute;right:14px;top:10px;border:0;background:none;font-size:30px;line-height:1;cursor:pointer;color:#555}.booking-choice-card h3{margin:8px 35px 10px 0}.booking-choice-card p{margin:0 0 22px;color:#666;line-height:1.5}.booking-choice-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.booking-choice{display:flex;align-items:center;justify-content:center;min-height:52px;padding:12px 14px;border-radius:10px;text-decoration:none;font-weight:800;border:1px solid #ddd}.booking-choice.whatsapp{background:#eef9f1;color:#16733a}.booking-choice.messenger{background:#eef4ff;color:#1769c2}.booking-choice.sms{background:#f5f5f5;color:#222}.booking-choice.email{background:#faf7ee;color:#7b5a16}@media(max-width:560px){.booking-choice-card{padding:26px 20px}.booking-choice-grid{grid-template-columns:1fr}}
 </style>
 <script type="application/ld+json">{
 "@context":"https://schema.org","@type":"LocalBusiness","name":"DRIVER DEHMANI","url":"https://www.driver-dehmani.fr/","telephone":"+33 6 98 22 42 36","email":"driver-dehmani@hotmail.com","description":"Chauffeur privé VTC à Narbonne et en Occitanie. Transferts aéroports et gares, longues distances, déplacements professionnels et événements.","serviceType":"Chauffeur privé VTC","areaServed":["Narbonne","Ouveillan","Béziers","Montpellier","Perpignan","Agde","Capestang","Carcassonne"],"availableLanguage":["French","English","Spanish","Arabic"],"openingHours":"Mo-Su 00:00-23:59"
@@ -1280,7 +1283,7 @@ document.addEventListener('DOMContentLoaded',function(){
     result.innerHTML='<div class="route-options"><h4>'+routeTextLocal('choose')+'</h4>'+routes.map((x,i)=>{
       const km=x.distance/1000,min=Math.max(1,Math.round(x.duration/60));
       const title=i===0?routeTextLocal('fast'):(i===1?routeTextLocal('alt'):routeTextLocal('other')),badge=i===0?routeTextLocal('recommended'):'';
-      return `<article class="route-option"><div class="route-option-head"><div><h4>${title}</h4><div class="route-data"><span>📍 ${km.toFixed(1)} km</span><span>⏱️ ${min} min</span></div></div>${badge?`<span class="route-badge">${badge}</span>`:''}</div><div class="route-price">${routeTextLocal('fare')} <strong>${Math.round(km*RATE)} €</strong></div><a class="route-book" href="${reservationUrl(A,B,km,min)}" target="_blank" rel="noopener">${routeTextLocal('book')}</a></article>`;
+      return `<article class="route-option"><div class="route-option-head"><div><h4>${title}</h4><div class="route-data"><span>📍 ${km.toFixed(1)} km</span><span>⏱️ ${min} min</span></div></div>${badge?`<span class="route-badge">${badge}</span>`:''}</div><div class="route-price">${routeTextLocal('fare')} <strong>${Math.round(km*RATE)} €</strong></div><button class="route-book" type="button" onclick='openBookingChoiceIndex(${i})'>${routeTextLocal('book')}</button></article>`;
     }).join('')+'</div>';
   }
   window.renderRouteTranslations=renderRoutes;
@@ -1290,9 +1293,25 @@ document.addEventListener('DOMContentLoaded',function(){
     const fs=await geocode(input.value); if(!fs.length)throw new Error('address');
     input._geo=fs[0]; return fs[0];
   }
-  function reservationUrl(A,B,km,min){
-    const msg=`Bonjour Rachid, je souhaite réserver ce trajet.\n\nDépart : ${A.properties.label}\nDestination : ${B.properties.label}\nDistance : ${km.toFixed(1)} km\nDurée estimée : ${min} min\nTarif indicatif : à partir de ${Math.round(km*RATE)} €`;
-    return 'https://wa.me/33698224236?text='+encodeURIComponent(msg);
+  function bookingMessage(A,B,km,min){
+    return `Bonjour Rachid, je souhaite réserver ce trajet.\n\nDépart : ${A.properties.label}\nDestination : ${B.properties.label}\nDistance : ${km.toFixed(1)} km\nDurée estimée : ${min} min\nTarif indicatif : à partir de ${Math.round(km*RATE)} €`;
+  }
+  function openBookingChoiceIndex(i){
+    if(!lastRouteData)return;
+    const {routes,A,B}=lastRouteData;
+    const x=routes[i]; if(!x)return;
+    openBookingChoices(A,B,x.distance/1000,Math.max(1,Math.round(x.duration/60)));
+  }
+  window.openBookingChoiceIndex=openBookingChoiceIndex;
+  function openBookingChoices(A,B,km,min){
+    const msg=bookingMessage(A,B,km,min), enc=encodeURIComponent(msg), subject=encodeURIComponent('Demande de réservation - DRIVER DEHMANI');
+    const old=document.getElementById('bookingChoiceModal'); if(old) old.remove();
+    const modal=document.createElement('div'); modal.id='bookingChoiceModal'; modal.className='booking-choice-modal';
+    modal.innerHTML=`<div class="booking-choice-backdrop"></div><div class="booking-choice-card" role="dialog" aria-modal="true" aria-labelledby="bookingChoiceTitle"><button class="booking-choice-close" type="button" aria-label="Fermer">×</button><div class="eyebrow">RÉSERVATION</div><h3 id="bookingChoiceTitle">Comment souhaitez-vous me contacter ?</h3><p>Choisissez le moyen qui vous convient pour envoyer votre demande avec les détails du trajet.</p><div class="booking-choice-grid"><a class="booking-choice whatsapp" href="https://wa.me/33698224236?text=${enc}" target="_blank" rel="noopener">◔ WhatsApp</a><a class="booking-choice messenger" href="https://m.me/61593792616239?text=${enc}" target="_blank" rel="noopener"><span class="fb-icon">f</span> Messenger</a><a class="booking-choice sms" href="sms:+33698224236?body=${enc}">💬 SMS</a><a class="booking-choice email" href="mailto:driver-dehmani@hotmail.com?subject=${subject}&body=${enc}">✉️ E-mail</a></div></div>`;
+    document.body.appendChild(modal);
+    const close=()=>modal.remove();
+    modal.querySelector('.booking-choice-close').addEventListener('click',close);
+    modal.querySelector('.booking-choice-backdrop').addEventListener('click',close);
   }
   calc.addEventListener('click',async()=>{
     result.innerHTML='<span class="route-loading">'+routeTextLocal('loading')+'</span>'; calc.disabled=true;
