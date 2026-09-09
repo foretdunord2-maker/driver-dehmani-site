@@ -670,6 +670,153 @@ footer .brand img{width:145px!important;height:72px!important}
 .header .header-google-link{display:flex!important;align-items:center!important;text-decoration:none!important;color:inherit!important;flex:0 0 auto!important;background:transparent!important;padding:0!important;border:0!important;border-radius:0!important;}
 .header .header-google-link:hover{background:transparent!important;}
 </style>
+
+<style id="route-estimator-style">
+.route-estimator{max-width:1180px;margin:28px auto 0;background:#fff;border:1px solid #ddd7cd;padding:26px 30px;box-sizing:border-box}
+.route-estimator-head{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:20px}
+.route-estimator h3{margin:6px 0 0;font-size:24px;color:#111}
+.route-rate{font-size:12px;color:#777;white-space:nowrap}.route-rate strong{color:#a77d2e}
+.route-fields{display:grid;grid-template-columns:1fr 1fr auto;gap:18px;align-items:end}
+.route-fields label{margin:0;font-size:11px;color:#111;font-weight:800}
+.route-field{position:relative}
+.route-fields input{display:block;margin-top:7px;background:#faf9f6;border:1px solid #ddd7cd;padding:12px 13px;box-sizing:border-box;width:100%}
+.route-suggestions{position:absolute;left:0;right:0;top:100%;z-index:100;background:#fff;border:1px solid #ddd7cd;box-shadow:0 8px 20px rgba(0,0,0,.10);max-height:220px;overflow:auto;display:none}
+.route-suggestion{display:block;width:100%;text-align:left;background:#fff;border:0;border-bottom:1px solid #eee;padding:11px 13px;font-size:13px;line-height:1.25;color:#222;cursor:pointer}
+.route-suggestion:last-child{border-bottom:0}
+.route-suggestion:hover,.route-suggestion:focus{background:#f5f2eb}
+.route-fields .btn{border:0;min-height:44px;white-space:nowrap;cursor:pointer}
+.route-result{margin-top:18px;padding:15px;background:#f5f2eb;border-left:3px solid var(--gold);font-size:13px;color:#333}
+.route-result strong{font-size:19px;color:#111}.route-disclaimer{margin:10px 0 0;font-size:9px!important;color:#888!important}
+@media(max-width:850px){.route-estimator{width:calc(100% - 24px);margin:20px auto 0;padding:20px 18px}.route-estimator-head{display:block}.route-rate{display:block;margin-top:10px}.route-fields{grid-template-columns:1fr;gap:4px}.route-fields .btn{width:100%;margin-top:10px}}
+</style>
+<script>
+(function(){
+  const btn=document.getElementById('routeCalculate');
+  const from=document.getElementById('routeFrom');
+  const to=document.getElementById('routeTo');
+  const result=document.getElementById('routeResult');
+  if(!btn||!from||!to||!result)return;
+
+  const RATE=1.70;
+  const chosen=new WeakMap();
+  const boxes=new WeakMap();
+  const debounce=new WeakMap();
+
+  function addBox(input){
+    const box=document.createElement('div');
+    box.className='route-suggestions';
+    box.setAttribute('role','listbox');
+    input.parentElement.appendChild(box);
+    boxes.set(input,box);
+  }
+  addBox(from); addBox(to);
+
+  function closeBox(input){
+    const box=boxes.get(input);
+    if(box){box.style.display='none';box.innerHTML='';}
+  }
+
+  function labelFor(p){
+    const a=p.address||{};
+    const street=[a.house_number,a.road].filter(Boolean).join(' ');
+    return [street,a.postcode,a.city||a.town||a.village||a.municipality,a.country]
+      .filter(Boolean).join(', ');
+  }
+
+  async function nominatim(q){
+    const url='https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&countrycodes=fr&q='+encodeURIComponent(q);
+    const r=await fetch(url,{headers:{'Accept':'application/json'}});
+    if(!r.ok) throw new Error('geocode');
+    return await r.json();
+  }
+
+  async function suggest(input){
+    const q=input.value.trim();
+    const box=boxes.get(input);
+    if(q.length<3){closeBox(input);return;}
+    box.style.display='block';
+    box.innerHTML='<div class="route-suggestion">Recherche de l’adresse…</div>';
+    try{
+      const rows=await nominatim(q);
+      if(!rows.length){
+        box.innerHTML='<div class="route-suggestion">Aucune adresse trouvée</div>';
+        return;
+      }
+      box.innerHTML='';
+      rows.forEach(row=>{
+        const b=document.createElement('button');
+        b.type='button';
+        b.className='route-suggestion';
+        b.textContent=labelFor(row)||row.display_name;
+        b.addEventListener('mousedown',e=>e.preventDefault());
+        b.addEventListener('click',()=>{
+          input.value=labelFor(row)||row.display_name;
+          chosen.set(input,{lat:Number(row.lat),lon:Number(row.lon)});
+          closeBox(input);
+        });
+        box.appendChild(b);
+      });
+    }catch(e){
+      box.innerHTML='<div class="route-suggestion">La recherche d’adresse est indisponible. Vérifiez votre connexion.</div>';
+    }
+  }
+
+  [from,to].forEach(input=>{
+    input.setAttribute('autocomplete','off');
+    input.addEventListener('input',()=>{
+      chosen.delete(input);
+      clearTimeout(debounce.get(input));
+      debounce.set(input,setTimeout(()=>suggest(input),450));
+    });
+    input.addEventListener('focus',()=>{
+      if(input.value.trim().length>=3)suggest(input);
+    });
+    input.addEventListener('blur',()=>setTimeout(()=>closeBox(input),220));
+  });
+
+  async function point(input){
+    if(chosen.has(input)) return chosen.get(input);
+    const q=input.value.trim();
+    if(!q) throw new Error('empty');
+    const rows=await nominatim(q);
+    if(!rows.length) throw new Error('notfound');
+    return {lat:Number(rows[0].lat),lon:Number(rows[0].lon)};
+  }
+
+  async function calculate(){
+    const a=from.value.trim(), b=to.value.trim();
+    if(!a||!b){
+      result.textContent='Indiquez un départ et une destination.';
+      return;
+    }
+    btn.disabled=true;
+    btn.textContent='Calcul en cours…';
+    result.textContent='Recherche des adresses et calcul du trajet…';
+    try{
+      const [A,B]=await Promise.all([point(from),point(to)]);
+      const route='https://router.project-osrm.org/route/v1/driving/'+A.lon+','+A.lat+';'+B.lon+','+B.lat+'?overview=false&steps=false';
+      const rr=await fetch(route,{headers:{'Accept':'application/json'}});
+      if(!rr.ok) throw new Error('route');
+      const rd=await rr.json();
+      if(rd.code!=='Ok'||!rd.routes||!rd.routes[0]) throw new Error('route');
+      const km=rd.routes[0].distance/1000;
+      const price=km*RATE;
+      result.innerHTML='<strong>'+km.toFixed(1)+' km</strong> · estimation à partir de <strong>'+price.toFixed(0)+' €</strong>';
+    }catch(e){
+      result.textContent='Adresse ou trajet introuvable. Sélectionnez une adresse dans les suggestions puis réessayez.';
+    }finally{
+      btn.disabled=false;
+      btn.textContent='Calculer mon trajet →';
+    }
+  }
+
+  btn.addEventListener('click',calculate);
+  [from,to].forEach(input=>input.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){e.preventDefault();calculate();}
+  }));
+})();
+</script>
+
 </head>
 <body>
 <header class="header"><div class="container nav">
@@ -720,7 +867,7 @@ footer .brand img{width:145px!important;height:72px!important}
 <div class="pricing-copy">
 <div class="eyebrow">VOTRE TRAJET, EN TOUTE TRANSPARENCE</div>
 <h2>Une tarification <em>personnalisée</em>, directement avec votre chauffeur.</h2>
-<p>Demandez votre tarif directement auprès de DRIVER DEHMANI. Chaque trajet est étudié selon votre destination, vos besoins et les conditions de réservation.</p>
+<p><strong>Tarif indicatif à partir de 1,70 €/km.</strong> Le prix affiché par le simulateur est une estimation : le tarif final peut varier selon le trajet, les conditions et les éventuels frais supplémentaires.</p>
 <div class="pricing-note"><span>✦</span><span><b>Réservation directe.</b> Un service simple, transparent et adapté à vos besoins.</span></div>
 </div>
 <div class="price-card">
@@ -741,6 +888,19 @@ footer .brand img{width:145px!important;height:72px!important}
 <a aria-label="Appeler DRIVER DEHMANI" class="secondary call-btn" href="tel:+33698224236">☎  Appeler</a>
 </div>
 </div>
+</div>
+<div class="route-estimator" id="routeEstimator">
+  <div class="route-estimator-head">
+    <div><div class="eyebrow">ESTIMEZ VOTRE TRAJET</div><h3>Calculez votre tarif indicatif</h3></div>
+    <span class="route-rate">À partir de <strong>1,70 €/km</strong></span>
+  </div>
+  <div class="route-fields">
+    <label>Départ<input id="routeFrom" type="text" placeholder="Ex. Narbonne" autocomplete="street-address"></label>
+    <label>Destination<input id="routeTo" type="text" placeholder="Ex. Carcassonne" autocomplete="street-address"></label>
+    <button class="btn gold" id="routeCalculate" type="button">Calculer mon trajet →</button>
+  </div>
+  <div class="route-result" id="routeResult" aria-live="polite">Entrez votre départ et votre destination pour obtenir une estimation.</div>
+  <p class="route-disclaimer">Estimation calculée sur la distance routière. Le tarif final est confirmé avant la réservation.</p>
 </div>
 </section>
 <section class="fleet" id="vehicules"><div class="container"><div class="section-head"><div><div class="eyebrow">LA FLOTTE</div><h2>Confort &amp; <em>élégance.</em></h2></div><p>Deux SUV hybrides sélectionnés pour offrir confort, espace et sérénité à chacun de vos trajets.</p></div><div class="cars">
